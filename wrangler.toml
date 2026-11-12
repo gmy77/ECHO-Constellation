@@ -1,0 +1,15 @@
+# ECHO Constellation - versione online su Cloudflare Workers.
+# Pubblicazione:  wrangler deploy   (oppure deploy.bat)
+name = "echo-constellation"
+main = "worker/index.js"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+# La pagina: file statici della cartella web/ (gli stessi incorporati in ECHO Constellation.exe)
+[assets]
+directory = "./web"
+
+# Cache dei dati orbitali CelesTrak (una copia per costellazione, rinnovata ogni due ore)
+[[kv_namespaces]]
+binding = "CACHE"
+id = "bb0a9b372f734319b7c3cddf13f98fde"

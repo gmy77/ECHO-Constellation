@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="it" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ECHO Constellation – Satelliti in tempo reale</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='6' fill='%2360cdff'/%3E%3Cellipse cx='16' cy='16' rx='14' ry='6' fill='none' stroke='%2360cdff' stroke-width='2' transform='rotate(-28 16 16)'/%3E%3C/svg%3E">
+<script>
+  // Applica subito il tema salvato, per evitare il lampo iniziale
+  (function () {
+    var tema = 'system';
+    try { tema = (JSON.parse(localStorage.getItem('echo-constellation.impostazioni') || '{}').tema) || 'system'; } catch (e) {}
+    if (tema === 'system') tema = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    document.documentElement.dataset.theme = tema;
+  })();
+</script>
+<link rel="stylesheet" href="css/fluent.css">
+</head>
+<body>
+<div class="app" id="app">
+
+  <!-- Barra del titolo -->
+  <header class="titlebar">
+    <button class="icon-btn" id="navToggle" title="Apri o chiudi il menu" aria-label="Apri o chiudi il menu"><span class="fi">&#xE700;</span></button>
+    <svg class="app-icon" viewBox="0 0 32 32" aria-hidden="true">
+      <defs><linearGradient id="gi" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#60cdff"/><stop offset="1" stop-color="#a99bff"/></linearGradient></defs>
+      <circle cx="16" cy="16" r="6" fill="url(#gi)"/>
+      <ellipse cx="16" cy="16" rx="14" ry="6" fill="none" stroke="url(#gi)" stroke-width="2" transform="rotate(-28 16 16)"/>
+    </svg>
+    <div class="app-name"><b>ECHO Constellation</b> <span class="secondary">· Satelliti in tempo reale</span></div>
+    <div class="search" id="search">
+      <input class="textbox" id="searchInput" type="text" placeholder="Cerca un satellite (nome o numero NORAD)" autocomplete="off" spellcheck="false" aria-label="Cerca un satellite">
+      <span class="fi search-glyph">&#xE721;</span>
+      <div class="flyout suggest" id="suggest" hidden></div>
+    </div>
+    <div class="titlebar-clock" title="Ora locale e ora UTC">
+      <span class="live-dot"></span><span id="clockLocal">--:--:--</span><span class="sep">·</span><span id="clockUtc">--:--:-- UTC</span>
+    </div>
+  </header>
+
+  <!-- Menu di navigazione -->
+  <nav class="navpane" aria-label="Sezioni">
+    <div>
+      <button class="nav-item selected" data-page="mappa" title="Mappa in tempo reale">
+        <span class="nav-ico"><span class="fi">&#xE909;</span></span><span class="nav-text">Mappa in tempo reale</span>
+      </button>
+      <button class="nav-item" data-page="stazioni" title="Stazioni spaziali">
+        <span class="nav-ico"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"><rect x="6.2" y="4.5" width="3.6" height="7" rx="1"/><path d="M8 1.5v3M8 11.5v3M1 6h3.6v4H1zM11.4 6H15v4h-3.6zM4.6 8h1.6M9.8 8h1.6"/></svg></span>
+        <span class="nav-text">Stazioni spaziali</span>
+      </button>
+      <button class="nav-item" data-page="grafici" title="Grafici">
+        <span class="nav-ico"><span class="fi">&#xE9D2;</span></span><span class="nav-text">Grafici</span>
+      </button>
+    </div>
+    <div>
+      <button class="nav-item" data-page="impostazioni" title="Impostazioni">
+        <span class="nav-ico"><span class="fi">&#xE713;</span></span><span class="nav-text">Impostazioni</span>
+      </button>
+    </div>
+  </nav>
+
+  <main class="content" id="content">
+
+    <!-- ===== Mappa ===== -->
+    <section class="page page-map" id="page-mappa">
+      <div class="page-head">
+        <div>
+          <h1 class="title">Mappa in tempo reale</h1>
+          <p class="page-sub" id="mapSummary">Caricamento dei dati orbitali…</p>
+        </div>
+        <div class="commands">
+          <button class="btn" id="btnHome"><span class="fi">&#xE80F;</span><span id="btnHomeText">Centra su casa</span></button>
+          <button class="btn" id="btnWorld"><span class="fi">&#xE909;</span>Mondo intero</button>
+        </div>
+      </div>
+      <div id="infobars"></div>
+
+      <div class="map-layout">
+        <div class="map-col">
+          <div class="map-card" id="mapCard">
+            <canvas id="mapBase"></canvas>
+            <canvas id="mapLive"></canvas>
+            <div class="map-chip acrylic"><span class="live-dot"></span><span id="mapChipText">in tempo reale</span></div>
+            <div class="map-zoom acrylic">
+              <button class="icon-btn small" id="zoomIn" title="Ingrandisci" aria-label="Ingrandisci"><span class="fi">&#xE8A3;</span></button>
+              <button class="icon-btn small" id="zoomOut" title="Riduci" aria-label="Riduci"><span class="fi">&#xE71F;</span></button>
+            </div>
+          </div>
+
+          <div class="card strip" id="issStrip">
+            <div class="card-head">
+              <div class="grow"><span class="body-strong">Stazione spaziale internazionale</span> <span class="caption tertiary" id="issEpoch"></span></div>
+              <span class="badge" id="issLight">—</span>
+              <button class="btn" id="issFollow" aria-pressed="false"><span class="fi">&#xE81D;</span>Segui</button>
+              <button class="link" id="issDetails">Dettagli e passaggi</button>
+            </div>
+            <div class="tiles">
+              <div class="tile"><div class="caption">Latitudine</div><div class="val" id="issLat">—</div><div class="sub" id="issLatSub">&nbsp;</div></div>
+              <div class="tile"><div class="caption">Longitudine</div><div class="val" id="issLon">—</div><div class="sub" id="issLonSub">&nbsp;</div></div>
+              <div class="tile"><div class="caption">Quota</div><div class="val" id="issAlt">—</div><div class="sub">sul livello del mare</div></div>
+              <div class="tile"><div class="caption">Velocità</div><div class="val" id="issVel">—</div><div class="sub" id="issVelSub">&nbsp;</div></div>
+              <div class="tile"><div class="caption" id="issHomeCap">Da casa</div><div class="val" id="issDist">—</div><div class="sub" id="issDistSub">&nbsp;</div></div>
+              <div class="tile"><div class="caption">Prossimo passaggio</div><div class="val" id="issNext">—</div><div class="sub" id="issNextSub">&nbsp;</div></div>
+            </div>
+          </div>
+        </div>
+
+        <aside class="side-col">
+          <div class="card">
+            <div class="card-head"><div class="grow"><div class="body-strong">Costellazioni</div><div class="caption secondary">Scegli cosa mostrare sulla mappa</div></div></div>
+            <div class="group-list" id="groupList"></div>
+          </div>
+
+          <div class="card" id="selCard" hidden>
+            <div class="card-head">
+              <div class="grow"><div class="body-strong" id="selName">—</div><div class="caption secondary" id="selSub"></div></div>
+              <button class="icon-btn small" id="selClose" title="Deseleziona" aria-label="Deseleziona"><span class="fi" style="font-size:12px">&#xE711;</span></button>
+            </div>
+            <div class="card-body">
+              <div class="kv">
+                <div><div class="caption">Latitudine</div><div class="v" id="selLat">—</div></div>
+                <div><div class="caption">Longitudine</div><div class="v" id="selLon">—</div></div>
+                <div><div class="caption">Quota</div><div class="v" id="selAlt">—</div></div>
+                <div><div class="caption">Velocità</div><div class="v" id="selVel">—</div></div>
+                <div><div class="caption">Inclinazione</div><div class="v" id="selInc">—</div></div>
+                <div><div class="caption">Periodo</div><div class="v" id="selPer">—</div></div>
+                <div><div class="caption">Elevazione da casa</div><div class="v" id="selEl">—</div></div>
+                <div><div class="caption">Età dei dati</div><div class="v" id="selAge">—</div></div>
+              </div>
+              <div class="card-actions">
+                <button class="btn" id="selCenter"><span class="fi">&#xE81D;</span>Centra</button>
+                <button class="btn" id="selFollow" aria-pressed="false">Segui</button>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ===== Stazioni spaziali ===== -->
+    <section class="page" id="page-stazioni" hidden>
+      <div class="page-head">
+        <div>
+          <h1 class="title">Stazioni spaziali</h1>
+          <p class="page-sub" id="stSummary">Posizione e passaggi calcolati dai dati CelesTrak</p>
+        </div>
+        <div class="commands">
+          <span class="badge" id="stLight">—</span>
+          <button class="btn" id="stShow"><span class="fi">&#xE909;</span>Mostra sulla mappa</button>
+        </div>
+      </div>
+      <div class="selector" id="stSelector" role="tablist"></div>
+      <div class="stat-grid" id="stStats"></div>
+      <div style="margin-top:16px"><div class="card chart-card " id="cardStation">
+          <div class="card-head"><div class="grow"><div class="body-strong" id="stChartTitle">Quota nelle prossime tre orbite</div><div class="caption secondary">Le fasce più scure sono i tratti nell'ombra della Terra</div></div><button class="link tbl-toggle">Tabella</button></div>
+          <div class="chart-view"><canvas class="chart tall" id="chStation"></canvas></div>
+          <div class="table-wrap chart-table" id="stChartTable"></div>
+        </div></div>
+      <div class="two-col">
+        <div class="card">
+          <div class="card-head"><div class="grow"><div class="body-strong" id="stPassTitle">Prossimi passaggi</div><div class="caption secondary">Prossime 72 ore, elevazione massima di almeno 10°. «Visibile» = stazione illuminata dal Sole con il cielo buio.</div></div></div>
+          <div class="table-wrap" id="stPasses"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><div class="grow"><div class="body-strong">Elementi orbitali</div><div class="caption secondary" id="stEpoch"></div></div></div>
+          <div class="card-body"><div class="kv" id="stElements"></div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== Grafici ===== -->
+    <section class="page" id="page-grafici" hidden>
+      <div class="page-head"><div><h1 class="title">Grafici</h1><p class="page-sub" id="chSummary">&nbsp;</p></div></div>
+      <div class="chart-grid">
+        <div class="card chart-card " id="cardSky">
+          <div class="card-head"><div class="grow"><div class="body-strong" id="skyTitle">Il cielo sopra casa, adesso</div><div class="caption secondary">Il centro è lo zenit, il bordo è l'orizzonte</div></div><button class="link tbl-toggle">Tabella</button></div>
+          <div class="chart-view"><canvas class="chart sky" id="chSky"></canvas><div class="legend" id="skyLegend"></div></div>
+          <div class="table-wrap chart-table" id="skyTable"></div>
+        </div>
+        <div class="card chart-card " id="cardNav">
+          <div class="card-head"><div class="grow"><div class="body-strong" id="navTitle">Satelliti di navigazione in vista nelle prossime 24 ore</div><div class="caption secondary">Quanti satelliti di ogni sistema sono almeno 10° sopra l'orizzonte di casa</div></div><button class="link tbl-toggle">Tabella</button></div>
+          <div class="chart-view"><div class="legend" id="navLegend"></div><canvas class="chart tall" id="chNav"></canvas><div class="empty" id="navEmpty" hidden></div></div>
+          <div class="table-wrap chart-table" id="navTable"></div>
+        </div>
+        <div class="card chart-card span2" id="cardAlt">
+          <div class="card-head"><div class="grow"><div class="body-strong" id="altTitle">A che quota volano</div><div class="caption secondary">Ogni trattino è un satellite; a destra la quota mediana. Scala logaritmica</div></div><button class="link tbl-toggle">Tabella</button></div>
+          <div class="chart-view"><canvas class="chart" id="chAlt"></canvas></div>
+          <div class="table-wrap chart-table" id="altTable"></div>
+        </div>
+      </div>
+      <div class="filter-row"><span class="body-strong">Dettaglio di una costellazione</span><select class="combo" id="detGroup" aria-label="Costellazione"></select></div>
+      <div class="empty" id="detEmpty" hidden>Attiva sulla mappa una costellazione diversa dalle stazioni per vederne il dettaglio.</div>
+      <div id="detBody">
+        <div class="stat-grid" style="margin-bottom:12px">
+          <div class="card stat"><div class="caption">Satelliti in orbita</div><div class="val" id="kpiN">—</div><div class="sub"></div></div>
+          <div class="card stat"><div class="caption">Quota mediana</div><div class="val"><span id="kpiMed">—</span><small>km</small></div><div class="sub"></div></div>
+          <div class="card stat"><div class="caption">Il più basso</div><div class="val"><span id="kpiMin">—</span><small>km</small></div><div class="sub"></div></div>
+          <div class="card stat"><div class="caption">Il più alto</div><div class="val"><span id="kpiMax">—</span><small>km</small></div><div class="sub"></div></div>
+          <div class="card stat"><div class="caption">Inclinazione più diffusa</div><div class="val" id="kpiInc">—</div><div class="sub" id="kpiIncSub"></div></div>
+        </div>
+        <div class="card chart-card " id="cardHist">
+          <div class="card-head"><div class="grow"><div class="body-strong" id="histTitle">Satelliti per fascia di quota</div><div class="caption secondary" id="histSub"></div></div><button class="link tbl-toggle">Tabella</button></div>
+          <div class="chart-view"><canvas class="chart tall" id="chHist"></canvas></div>
+          <div class="table-wrap chart-table" id="histTable"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== Impostazioni ===== -->
+    <section class="page" id="page-impostazioni" hidden>
+      <div class="page-head"><h1 class="title">Impostazioni</h1></div>
+      <div class="settings">
+        <div class="section-title" style="margin-top:0">Aspetto</div>
+        <div class="setting">
+          <span class="fi">&#xE790;</span>
+          <div class="grow"><div>Tema dell'app</div><div class="desc">Scegli se seguire Windows o usare sempre un tema</div></div>
+          <div class="ctl"><select class="combo" id="setTheme">
+            <option value="system">Usa l'impostazione di sistema</option><option value="light">Chiaro</option><option value="dark">Scuro</option>
+          </select></div>
+        </div>
+
+        <div class="section-title">Mappa</div>
+        <div class="setting">
+          <span class="fi">&#xE81E;</span>
+          <div class="grow"><div>Lunghezza delle traiettorie</div><div class="desc">Quanta parte dell'orbita futura disegnare per le costellazioni con le traiettorie attive</div></div>
+          <div class="ctl"><select class="combo" id="setTrackLen">
+            <option value="0.08">Corta</option><option value="0.25">Media</option><option value="1">Orbita intera</option>
+          </select></div>
+        </div>
+        <div class="setting">
+          <span class="fi">&#xE8D2;</span>
+          <div class="grow"><div>Nomi dei satelliti</div><div class="desc">Etichette accanto ai satelliti di navigazione (le megacostellazioni restano senza nomi)</div></div>
+          <div class="ctl"><select class="combo" id="setLabels">
+            <option value="auto">Solo ingrandendo</option><option value="always">Sempre</option><option value="never">Mai</option>
+          </select></div>
+        </div>
+        <div class="setting">
+          <span class="fi">&#xE708;</span>
+          <div class="grow"><div>Ombra della notte</div><div class="desc">Scurisce la parte di Terra dove in questo momento è notte</div></div>
+          <div class="ctl"><label class="switch"><input type="checkbox" id="setNight"><span class="switch-track"><span class="switch-knob"></span></span></label></div>
+        </div>
+
+        <div class="section-title">Posizione di casa</div>
+        <div class="setting">
+          <span class="fi">&#xE80F;</span>
+          <div class="grow"><div>Luogo di osservazione</div><div class="desc">Usato per i passaggi, l'elevazione e la distanza. Latitudine e longitudine in gradi decimali (nord ed est positivi)</div></div>
+          <div class="ctl">
+            <input class="textbox" id="setHomeName" type="text" aria-label="Nome del luogo" style="width:170px">
+            <input class="textbox short" id="setHomeLat" type="text" inputmode="decimal" aria-label="Latitudine">
+            <input class="textbox short" id="setHomeLon" type="text" inputmode="decimal" aria-label="Longitudine">
+            <button class="btn accent" id="setHomeSave">Salva</button>
+          </div>
+        </div>
+
+        <div class="section-title">Dati</div>
+        <div class="setting" style="align-items:flex-start">
+          <span class="fi">&#xE895;</span>
+          <div class="grow"><div>Dati orbitali CelesTrak</div><div class="desc">Ogni costellazione viene scaricata solo quando la attivi e poi tenuta in copia locale per due ore, come richiesto da CelesTrak.</div>
+            <div class="data-list" id="dataList"></div>
+          </div>
+        </div>
+
+        <p class="about">ECHO Constellation 1.0 · Dati orbitali: CelesTrak (Dr. T.S. Kelso) · Calcolo delle orbite: satellite.js (SGP4) · Cartografia: Natural Earth.<br>Le posizioni sono calcolate sul tuo computer a partire dagli elementi orbitali pubblici: non sono telemetria ricevuta dai satelliti.</p>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="tooltip" id="tooltip" hidden></div>
+
+<script src="vendor/satellite.min.js"></script>
+<script src="vendor/topojson-client.min.js"></script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
